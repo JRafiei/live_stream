@@ -1,0 +1,14 @@
+{
+    "database": "Mongo",
+    "appServer": "Fastapi",
+    "webserver": "nginx",
+    "frontend": [
+        "javascript",
+        "maybe react"
+    ],
+    "cssFramework": [
+        "materializecss",
+        "bootstrap"
+    ],
+    "deployment": "Docker"
+}

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Live Streaming</title>
+    <link rel="stylesheet" href="/static/materialize.min.css">
+    <link href="https://vjs.zencdn.net/7.8.2/video-js.css" rel="stylesheet" />
+</head>
+<body>
+  <div class="container">
+    <h1>live stream</h1>
+    <div class="row">
+      <div class="col s6">
+        <video-js id=vid1 width=640 height=480 class="vjs-default-skin" controls>
+          <source
+             src="http://localhost:8080/hls/stream.m3u8"
+             type="application/x-mpegURL">
+        </video-js>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://vjs.zencdn.net/7.8.2/video.js"></script>
+  <script>
+  var player = videojs('vid1');
+  player.play();
+  </script>
+</body>
+</html>
