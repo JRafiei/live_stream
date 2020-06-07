@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add</title>
+  <link rel="stylesheet" href="/static/materialize.min.css">
+</head>
+<body>
+  <div class="container">
+    <div class="row">
+      <div class="col m8">
+        <div class="card">
+          <div class="card-content">
+            <span class="card-title">Add a new live</span>
+            <form action="/live/add" method="post">
+              <div class="row">
+                <div class="input-field col s12">
+                  <input type="number" id="wall-id" name="wall_id">
+                  <label for="wall-id">wall id</label>
+                </div>
+                <div class="input-field col s12">
+                  <p>
+                    <label>
+                      <input type="checkbox" id="private" name="private"/>
+                      <span>private</span>
+                    </label>
+                  </p>
+                </div>
+                <button class="add-btn btn blue darken-3"><i class="fa fa-plus"></i>Add live</button>
+              </div>
+            </form>
+            </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/materialize.min.js"></script>
+  <script>
+    const form = document.querySelector('form');
+    form.addEventListener('submit', function (e) {
+      const wall_id = document.querySelector('#wall-id').value;
+      const private = document.querySelector('#private').checked;
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const user_id = urlParams.get('uid');
+
+      const data = {
+        wall_id: parseInt(wall_id),
+        private: private,
+        user_id: parseInt(user_id)
+      }
+      fetch('http://localhost:8000/live/add', {
+        method: 'POST', // *GET, POST, PUT, DELETE, etc.
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data) // body data type must match "Content-Type" header
+      })
+      .then(res => res.json())
+      .then(resData => console.log(resData));
+      e.preventDefault()
+    })
+  </script>
+</body>
+</html>
