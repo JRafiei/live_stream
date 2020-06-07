@@ -35,10 +35,38 @@ async def home(request):
         return json({"result": result})
 
 
-@app.route("/live/1")
-async def test(request):
-    with open('player.html') as f:
-        content = f.read()
+@app.route("/live/<stream_key>")
+async def view_show(request, stream_key):
+    user_id = int(request.args.get('uid'))
+    async with app.config.pg_pool.acquire() as connection:
+        live = await connection.fetchrow(
+            """
+            select id from live
+            where stream_key = $1
+            """,
+            stream_key
+        )
+        if live:
+            user_record = await connection.fetchrow(
+                """
+                select * from user_live
+                where user_id = $1
+                and live_id = $2
+                """,
+                user_id, live['id']
+            )
+        else:
+            return html('Permission_denied')
+    
+    if user_record:
+        with open('player.html') as f:
+            content = f.read()
+            content = content.replace('~stream_key~', stream_key)
+        return html(content)
+    else:
+        return html('Permission_denied')
+
+
 @app.route("/live/add", methods=["GET", "POST"])
 async def add_show(request):
     if request.method == 'POST':
