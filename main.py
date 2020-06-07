@@ -36,29 +36,33 @@ async def home(request):
 
 
 @app.route("/live/<live_id:int>")
-async def view_show(request, live_id):
+async def view_live(request, live_id):
     user_id = int(request.args.get('uid'))
+    allow = True
     async with app.config.pg_pool.acquire() as connection:
         live = await connection.fetchrow(
             """
-            select stream_key from live
+            select stream_key, private from live
             where id = $1
             """,
             live_id
         )
         if live:
-            user_record = await connection.fetchrow(
-                """
-                select * from user_live
-                where user_id = $1
-                and live_id = $2
-                """,
-                user_id, live_id
-            )
+            if live['private']:
+                user_record = await connection.fetchrow(
+                    """
+                    select * from user_live
+                    where user_id = $1
+                    and live_id = $2
+                    """,
+                    user_id, live_id
+                )
+                if not user_record:
+                    allow = False
         else:
-            return html('Permission_denied')
+            allow = False
     
-    if user_record:
+    if allow:
         with open('templates/player.html') as f:
             content = f.read()
             content = content.replace('~stream_key~', live['stream_key'])
