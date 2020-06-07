@@ -35,16 +35,16 @@ async def home(request):
         return json({"result": result})
 
 
-@app.route("/live/<stream_key>")
-async def view_show(request, stream_key):
+@app.route("/live/<live_id:int>")
+async def view_show(request, live_id):
     user_id = int(request.args.get('uid'))
     async with app.config.pg_pool.acquire() as connection:
         live = await connection.fetchrow(
             """
-            select id from live
-            where stream_key = $1
+            select stream_key from live
+            where id = $1
             """,
-            stream_key
+            live_id
         )
         if live:
             user_record = await connection.fetchrow(
@@ -53,15 +53,15 @@ async def view_show(request, stream_key):
                 where user_id = $1
                 and live_id = $2
                 """,
-                user_id, live['id']
+                user_id, live_id
             )
         else:
             return html('Permission_denied')
     
     if user_record:
-        with open('player.html') as f:
+        with open('templates/player.html') as f:
             content = f.read()
-            content = content.replace('~stream_key~', stream_key)
+            content = content.replace('~stream_key~', live['stream_key'])
         return html(content)
     else:
         return html('Permission_denied')
@@ -70,7 +70,6 @@ async def view_show(request, stream_key):
 @app.route("/live/add", methods=["GET", "POST"])
 async def add_show(request):
     if request.method == 'POST':
-        import ipdb ; ipdb.set_trace()
         user_id = request.json.get('user_id')
         wall_id = request.json.get('wall_id')
         private = request.json.get('private')
@@ -88,7 +87,7 @@ async def add_show(request):
         await inform_followers(user_id, record['id'])
         return json({'live_id': record['id']})
     else:
-        with open('add.html') as f:
+        with open('templates/add.html') as f:
             content = f.read()
             return html(content)
 
