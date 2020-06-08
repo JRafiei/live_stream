@@ -36,19 +36,27 @@ async def home(request):
 
 
 @app.route("/stream/<stream_id:int>")
-async def view_stream(request, stream_id):
+async def join_stream(request, stream_id):
     user_id = int(request.args.get('uid'))
-    allow = True
     async with app.config.pg_pool.acquire() as connection:
         stream = await connection.fetchrow(
             """
-            select stream_key, private from stream
+            select * from stream
             where id = $1
             """,
             stream_id
         )
-        if stream:
-            if stream['private']:
+        if not stream:
+            return html('Permission_denied')
+
+    if stream['private']:
+        if stream['wall_id']:
+            # get wall followers
+            followers = [1,3,6]
+            if user_id not in followers:
+                return html('Permission_denied')
+        else:
+            async with app.config.pg_pool.acquire() as connection:
                 user_record = await connection.fetchrow(
                     """
                     select * from user_stream
@@ -58,17 +66,12 @@ async def view_stream(request, stream_id):
                     user_id, stream_id
                 )
                 if not user_record:
-                    allow = False
-        else:
-            allow = False
-    
-    if allow:
-        with open('templates/player.html') as f:
-            content = f.read()
-            content = content.replace('~stream_key~', stream['stream_key'])
-        return html(content)
-    else:
-        return html('Permission_denied')
+                    return html('Permission_denied')
+
+    with open('templates/player.html') as f:
+        content = f.read()
+        content = content.replace('{{stream_key}}', stream['stream_key'])
+    return html(content)
 
 
 @app.route("/stream/add", methods=["GET", "POST"])
@@ -77,40 +80,34 @@ async def add_show(request):
         user_id = request.json.get('user_id')
         wall_id = request.json.get('wall_id')
         private = request.json.get('private')
+        stream_key = uuid4().hex[:8]
         async with app.config.pg_pool.acquire() as connection:
-            record = await connection.fetchrow(
+            stream = await connection.fetchrow(
                 """
                 insert into stream
                 (wall_id, stream_key, private)
                 values
                 ($1, $2, $3)
-                returning id
+                returning *
                 """,
-                wall_id, uuid4().hex, private
+                wall_id, stream_key, private
             )
-        await inform_followers(user_id, record['id'])
-        return json({'stream_id': record['id']})
+        await inform_followers(user_id, stream)
+        return json({'stream_id': stream['id']})
     else:
         with open('templates/add.html') as f:
             content = f.read()
             return html(content)
 
 
-async def inform_followers(user_id, stream_id):
-    followers = [1,4,8,32] # simulate get_followers
-    values = [(follower, stream_id) for follower in followers]
-    async with app.config.pg_pool.acquire() as connection:
-        record = await connection.executemany(
-            """
-            insert into user_stream
-            (user_id, stream_id)
-            values
-            ($1, $2)
-            """,
-            values
-        )
-
-    
+async def inform_followers(user_id, stream):
+    if stream['wall_id']:
+        # send message to wall's group
+        pass
+    else:
+        if not stream['private']:
+            # inform all users that have chat with this user
+            pass
 
 
 if __name__ == "__main__":

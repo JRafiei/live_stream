@@ -12,8 +12,8 @@
       <div class="col m8">
         <div class="card">
           <div class="card-content">
-            <span class="card-title">Add a new live</span>
-            <form action="/live/add" method="post">
+            <span class="card-title">Add a new stream</span>
+            <form>
               <div class="row">
                 <div class="input-field col s12">
                   <input type="number" id="wall-id" name="wall_id">
@@ -27,7 +27,7 @@
                     </label>
                   </p>
                 </div>
-                <button class="add-btn btn blue darken-3"><i class="fa fa-plus"></i>Add live</button>
+                <button class="add-btn btn blue darken-3"><i class="fa fa-plus"></i>Add stream</button>
               </div>
             </form>
             </div>
@@ -51,7 +51,7 @@
         private: private,
         user_id: parseInt(user_id)
       }
-      fetch('http://localhost:8000/live/add', {
+      fetch('http://localhost:8000/stream/add', {
         method: 'POST', // *GET, POST, PUT, DELETE, etc.
         headers: {
           'Content-Type': 'application/json'
