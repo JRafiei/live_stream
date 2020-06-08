@@ -28,34 +28,34 @@ async def register_db(app, loop):
 @app.route("/")
 async def home(request):
     async with app.config.pg_pool.acquire() as connection:
-        records = await connection.fetch('select * from live')
+        records = await connection.fetch('select * from stream')
         result = []
         for record in records:
             result.append(dict(record))
         return json({"result": result})
 
 
-@app.route("/live/<live_id:int>")
-async def view_live(request, live_id):
+@app.route("/stream/<stream_id:int>")
+async def view_stream(request, stream_id):
     user_id = int(request.args.get('uid'))
     allow = True
     async with app.config.pg_pool.acquire() as connection:
-        live = await connection.fetchrow(
+        stream = await connection.fetchrow(
             """
-            select stream_key, private from live
+            select stream_key, private from stream
             where id = $1
             """,
-            live_id
+            stream_id
         )
-        if live:
-            if live['private']:
+        if stream:
+            if stream['private']:
                 user_record = await connection.fetchrow(
                     """
-                    select * from user_live
+                    select * from user_stream
                     where user_id = $1
-                    and live_id = $2
+                    and stream_id = $2
                     """,
-                    user_id, live_id
+                    user_id, stream_id
                 )
                 if not user_record:
                     allow = False
@@ -65,13 +65,13 @@ async def view_live(request, live_id):
     if allow:
         with open('templates/player.html') as f:
             content = f.read()
-            content = content.replace('~stream_key~', live['stream_key'])
+            content = content.replace('~stream_key~', stream['stream_key'])
         return html(content)
     else:
         return html('Permission_denied')
 
 
-@app.route("/live/add", methods=["GET", "POST"])
+@app.route("/stream/add", methods=["GET", "POST"])
 async def add_show(request):
     if request.method == 'POST':
         user_id = request.json.get('user_id')
@@ -80,7 +80,7 @@ async def add_show(request):
         async with app.config.pg_pool.acquire() as connection:
             record = await connection.fetchrow(
                 """
-                insert into live
+                insert into stream
                 (wall_id, stream_key, private)
                 values
                 ($1, $2, $3)
@@ -89,21 +89,21 @@ async def add_show(request):
                 wall_id, uuid4().hex, private
             )
         await inform_followers(user_id, record['id'])
-        return json({'live_id': record['id']})
+        return json({'stream_id': record['id']})
     else:
         with open('templates/add.html') as f:
             content = f.read()
             return html(content)
 
 
-async def inform_followers(user_id, live_id):
+async def inform_followers(user_id, stream_id):
     followers = [1,4,8,32] # simulate get_followers
-    values = [(follower, live_id) for follower in followers]
+    values = [(follower, stream_id) for follower in followers]
     async with app.config.pg_pool.acquire() as connection:
         record = await connection.executemany(
             """
-            insert into user_live
-            (user_id, live_id)
+            insert into user_stream
+            (user_id, stream_id)
             values
             ($1, $2)
             """,
