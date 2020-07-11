@@ -64,7 +64,6 @@ async def notify_server_started_after_five_seconds(app):
 
 
 
-@app.route("/")
 async def home(request):
     async with app.config.pg_pool.acquire() as connection:
         records = await connection.fetch('select * from stream')
@@ -74,7 +73,6 @@ async def home(request):
         return json_response({"result": result})
 
 
-@app.route("/stream/<stream_id:int>")
 async def join_stream(request, stream_id):
     user_id = int(request.args.get('uid'))
     async with app.config.pg_pool.acquire() as connection:
@@ -113,8 +111,7 @@ async def join_stream(request, stream_id):
     return html(content)
 
 
-@app.route("/stream/add", methods=["GET", "POST"])
-async def add_show(request):
+async def add_stream(request):
     if request.method == 'POST':
         user_id = request.json.get('user_id')
         wall_id = request.json.get('wall_id')
@@ -131,6 +128,7 @@ async def add_show(request):
                 """,
                 wall_id, stream_key, private
             )
+        app.chats[stream_key] = {'audio_track': None, 'video_track': None, 'peer': None}
         await inform_followers(user_id, stream)
         return json_response({'stream_id': stream['id']})
     else:
@@ -139,7 +137,6 @@ async def add_show(request):
             return html(content)
 
 
-@app.route("/stream/<stream_id:int>/send", methods=["GET", "POST"])
 async def send_stream(request, stream_id):
     async with app.config.pg_pool.acquire() as connection:
         stream = await connection.fetchrow(
@@ -158,7 +155,6 @@ async def send_stream(request, stream_id):
         return html(content)
 
 
-@app.route("/offer/", methods=["GET", "POST"])
 async def offer(request):
     params = request.json
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
@@ -247,5 +243,11 @@ async def inform_followers(user_id, stream):
 
 
 if __name__ == "__main__":
+    app.add_route(home, '/')
+    app.add_route(add_stream, '/stream/add', methods=["GET", "POST"])
+    app.add_route(send_stream, '/stream/<stream_id:int>/send')
+    app.add_route(join_stream, '/stream/<stream_id:int>')
+    app.add_route(join_stream, '/offer/', methods=["GET", "POST"])
+
     app.add_task(notify_server_started_after_five_seconds)
     app.run(host="0.0.0.0", port=8443, ssl=context, workers=1)
