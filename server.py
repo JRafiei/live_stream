@@ -1,14 +1,17 @@
 import asyncio
+import json
 import logging
+import ssl
+import time
 from asyncpg import create_pool
-from uuid import uuid4
-from sanic import Sanic
-from sanic.response import json as json_response, html
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 from queue import Queue
-import ssl
-import time
+from sanic import Sanic
+from sanic.response import json as json_response, html
+from sanic.websocket import WebSocketProtocol
+from uuid import uuid4
+
 
 context = ssl.create_default_context(purpose=ssl.Purpose.CLIENT_AUTH)
 context.load_cert_chain("ssl_keys/selfsigned.crt", keyfile="ssl_keys/selfsigned.key")
@@ -37,6 +40,8 @@ async def register_db(app, loop):
         loop=loop
     )
 
+    app.ws_connections = {}
+    
     app.chats = {
         'a495fba2': {'audio_track': None, 'video_track': None, 'peer': '34551d92'},
         '34551d92': {'audio_track': None, 'video_track': None, 'peer': 'a495fba2'},
@@ -45,23 +50,57 @@ async def register_db(app, loop):
     app.add_track_queue = Queue()
 
 
-async def notify_server_started_after_five_seconds(app):
+async def feed(request, ws):
     while True:
-        if not app.add_track_queue.empty():
-            task = app.add_track_queue.get_nowait()
-            pc = task['pc']
-            peer = task['peer']
-            kind = task['kind']
-            if kind == 'video' and app.chats[peer]['video_track']:
-                pc.addTrack(app.chats[peer]['video_track'])
-                app.chats[peer]['video_track'] = None
-            elif kind == 'audio' and app.chats[peer]['audio_track']:
-                pc.addTrack(app.chats[peer]['audio_track'])
-                app.chats[peer]['audio_track'] = None
-            else:
-                app.add_track_queue.put(task)
-        await asyncio.sleep(3)
+        data = await ws.recv()
+        data = json.loads(data)
+        if 'start' in data:
+            user_id = data.get('uid')
+            app.ws_connections[user_id] = ws
 
+
+async def add_stream(request):
+    if request.method == 'POST':
+        user_id = request.json.get('user_id')
+        wall_id = request.json.get('wall_id')
+        private = request.json.get('private')
+        stream_key = uuid4().hex[:8]
+        async with app.config.pg_pool.acquire() as connection:
+            stream = await connection.fetchrow(
+                """
+                insert into stream
+                (wall_id, stream_key, private)
+                values
+                ($1, $2, $3)
+                returning *
+                """,
+                wall_id, stream_key, private
+            )
+        app.chats[stream_key] = {'audio_track': None, 'video_track': None, 'peer': None}
+        await inform_followers(user_id, stream)
+        return json_response({'stream_id': stream['id']})
+    else:
+        with open('templates/add.html') as f:
+            content = f.read()
+            return html(content)
+
+
+async def send_stream(request, stream_id):
+    async with app.config.pg_pool.acquire() as connection:
+        stream = await connection.fetchrow(
+            """
+            select * from stream
+            where id = $1
+            """,
+            stream_id
+        )
+        if not stream:
+            return html('Permission_denied')
+        stream_key = stream['stream_key']
+    with open('templates/send.html') as f:
+        content = f.read()
+        content = content.replace('{{stream_key}}', stream['stream_key'])
+        return html(content)
 
 
 async def home(request):
@@ -111,48 +150,13 @@ async def join_stream(request, stream_id):
     return html(content)
 
 
-async def add_stream(request):
-    if request.method == 'POST':
-        user_id = request.json.get('user_id')
-        wall_id = request.json.get('wall_id')
-        private = request.json.get('private')
-        stream_key = uuid4().hex[:8]
-        async with app.config.pg_pool.acquire() as connection:
-            stream = await connection.fetchrow(
-                """
-                insert into stream
-                (wall_id, stream_key, private)
-                values
-                ($1, $2, $3)
-                returning *
-                """,
-                wall_id, stream_key, private
-            )
-        app.chats[stream_key] = {'audio_track': None, 'video_track': None, 'peer': None}
-        await inform_followers(user_id, stream)
-        return json_response({'stream_id': stream['id']})
-    else:
-        with open('templates/add.html') as f:
-            content = f.read()
-            return html(content)
-
-
-async def send_stream(request, stream_id):
-    async with app.config.pg_pool.acquire() as connection:
-        stream = await connection.fetchrow(
-            """
-            select * from stream
-            where id = $1
-            """,
-            stream_id
-        )
-        if not stream:
-            return html('Permission_denied')
-        stream_key = stream['stream_key']
-    with open('templates/send.html') as f:
-        content = f.read()
-        content = content.replace('{{stream_key}}', stream['stream_key'])
-        return html(content)
+async def call(request):
+    caller = request.json.get('from')
+    callee = request.json.get('to')
+    if callee in app.ws_connections:
+        ws = app.ws_connections[callee]
+        await ws.send(json.dumps({'type': 'call', 'from': caller, 'to': callee}))
+    return json_response({'status': 'success'})
 
 
 async def offer(request):
@@ -247,7 +251,9 @@ if __name__ == "__main__":
     app.add_route(add_stream, '/stream/add', methods=["GET", "POST"])
     app.add_route(send_stream, '/stream/<stream_id:int>/send')
     app.add_route(join_stream, '/stream/<stream_id:int>')
-    app.add_route(join_stream, '/offer/', methods=["GET", "POST"])
+    app.add_route(offer, '/offer/', methods=["GET", "POST"])
+    app.add_route(call, '/call/', methods=["GET", "POST"])
+    app.add_websocket_route(feed, '/ws')
 
-    app.add_task(notify_server_started_after_five_seconds)
+    # app.add_task(notify_server_started_after_five_seconds)
     app.run(host="0.0.0.0", port=8443, ssl=context, workers=1)
