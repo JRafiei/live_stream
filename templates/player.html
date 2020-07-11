@@ -23,7 +23,13 @@
       <div class="card">
         <div class="card-content">
           <span class="card-title">live stream (4)</span>
-          <video-js id="vid1" width="640" height="360" class="vjs-default-skin" controls>
+          <video-js id="me" width="640" height="360" class="vjs-default-skin" controls>
+            <source
+              src="http://localhost:8080/hls/{{stream_key}}.m3u8"
+              type="application/x-mpegURL">
+          </video-js>
+          <br><br>
+          <video-js id="other" width="640" height="360" class="vjs-default-skin" controls>
             <source
               src="http://localhost:8080/hls/{{stream_key}}.m3u8"
               type="application/x-mpegURL">
@@ -36,8 +42,12 @@
 
   <script src="https://vjs.zencdn.net/7.8.2/video.js"></script>
   <script>
-  var player = videojs('vid1');
-  player.play();
+    videojs('me').ready(function() {
+      this.play();
+    });
+    videojs('other').ready(function() {
+      this.play();
+    });
   </script>
 </body>
 </html>
