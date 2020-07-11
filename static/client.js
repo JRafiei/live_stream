@@ -1,3 +1,54 @@
+let socket = new WebSocket("wss://localhost:8443/ws");
+
+
+socket.onopen = function(e) {
+    console.log("[open] Connection established");
+    console.log("Sending to server");
+    socket.send(JSON.stringify({uid: stream_key, start: true}));
+};
+  
+socket.onmessage = function(event) {
+    console.log(`[message] Data received from server: ${event.data}`);
+    let data;
+    try {
+        data = JSON.parse(event.data);
+    } catch (error) {
+        console.error(error);
+        data = {};
+    }
+    if (data.type == 'call') {
+        if (confirm(`${data.from} is calling you. accept the call?`)){
+            start();
+        }
+    }
+};
+  
+  socket.onclose = function(event) {
+    if (event.wasClean) {
+      console.log(`[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+    } else {
+      // e.g. server process killed or network down
+      // event.code is usually 1006 in this case
+      console.log('[close] Connection died');
+    }
+  };
+  
+  socket.onerror = function(error) {
+    console.log(`[error] ${error.message}`);
+  };
+
+function call() {
+    fetch('/call', {
+        body: JSON.stringify({
+            from: stream_key,
+            to: stream_key == 'a495fba2' ? '34551d92' : 'a495fba2'
+        }),
+        headers: {'Content-Type': 'application/json'},
+        method: 'POST'
+    });
+}
+
+
 // get DOM elements
 var dataChannelLog = document.getElementById('data-channel'),
     iceConnectionLog = document.getElementById('ice-connection-state'),

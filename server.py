@@ -47,7 +47,25 @@ async def register_db(app, loop):
         '34551d92': {'audio_track': None, 'video_track': None, 'peer': 'a495fba2'},
     }
 
-    app.add_track_queue = Queue()
+    # app.add_track_queue = Queue()
+
+
+# async def notify_server_started_after_five_seconds(app):
+#     while True:
+#         if not app.add_track_queue.empty():
+#             task = app.add_track_queue.get_nowait()
+#             pc = task['pc']
+#             peer = task['peer']
+#             kind = task['kind']
+#             if kind == 'video' and app.chats[peer]['video_track']:
+#                 pc.addTrack(app.chats[peer]['video_track'])
+#                 app.chats[peer]['video_track'] = None
+#             elif kind == 'audio' and app.chats[peer]['audio_track']:
+#                 pc.addTrack(app.chats[peer]['audio_track'])
+#                 app.chats[peer]['audio_track'] = None
+#             else:
+#                 app.add_track_queue.put(task)
+#         await asyncio.sleep(3)
 
 
 async def feed(request, ws):
@@ -197,19 +215,29 @@ async def offer(request):
             pcs.discard(pc)
 
     @pc.on("track")
-    def on_track(track):
+    async def on_track(track):
         log_info("Track %s received", track.kind)
 
         if track.kind == "audio":
             app.chats[stream_key]['audio_track'] = track
-            app.add_track_queue.put({'pc': pc, 'peer': peer, 'kind': track.kind})
+            # app.add_track_queue.put({'pc': pc, 'peer': peer, 'kind': track.kind})
+            while True:
+                if app.chats[peer]['audio_track']:
+                    pc.addTrack(app.chats[peer]['audio_track'])
+                    break
+                await asyncio.sleep(0.1)
             # pc.addTrack(track)
         elif track.kind == "video":
             # local_video = VideoTransformTrack(
             #     track, transform=params["video_transform"]
             # )
             app.chats[stream_key]['video_track'] = track
-            app.add_track_queue.put({'pc': pc, 'peer': peer, 'kind': track.kind})
+            while True:
+                if app.chats[peer]['video_track']:
+                    pc.addTrack(app.chats[peer]['video_track'])
+                    break
+                await asyncio.sleep(0.1)
+            # app.add_track_queue.put({'pc': pc, 'peer': peer, 'kind': track.kind})
             # pc.addTrack(track)
 
             # recorder.addTrack(track)
