@@ -1,10 +1,8 @@
-let socket = new WebSocket("wss://localhost:8443/ws");
-
+let socket = new WebSocket("wss://192.168.1.15:8443/ws");
 
 socket.onopen = function(e) {
     console.log("[open] Connection established");
     console.log("Sending to server");
-    socket.send(JSON.stringify({uid: stream_key, start: true}));
 };
   
 socket.onmessage = function(event) {
@@ -17,9 +15,22 @@ socket.onmessage = function(event) {
         data = {};
     }
     if (data.type == 'call') {
+        let status;
         if (confirm(`${data.from} is calling you. accept the call?`)){
+            status = true;
             start();
+        } else {
+            status = false;
         }
+        fetch('/call-response', {
+            body: JSON.stringify({
+                from: data.from,
+                to: data.to,
+                status: status
+            }),
+            headers: {'Content-Type': 'application/json'},
+            method: 'POST'
+        });
     }
 };
   
@@ -40,12 +51,17 @@ socket.onmessage = function(event) {
 function call() {
     fetch('/call', {
         body: JSON.stringify({
-            from: stream_key,
-            to: stream_key == 'a495fba2' ? '34551d92' : 'a495fba2'
+            from: document.querySelector('#register #name').value,
+            to: document.querySelector('#to').value
         }),
         headers: {'Content-Type': 'application/json'},
         method: 'POST'
     });
+}
+
+function register() {
+    const name = document.querySelector("#register #name").value;
+    socket.send(JSON.stringify({name: name, type: 'register'}));
 }
 
 
@@ -133,7 +149,8 @@ function negotiate() {
                 sdp: offer.sdp,
                 type: offer.type,
                 video_transform: document.getElementById('video-transform').value,
-                stream_key: stream_key
+                stream_key: stream_key,
+                name: document.querySelector('#register #name').value
             }),
             headers: {
                 'Content-Type': 'application/json'
@@ -151,7 +168,7 @@ function negotiate() {
 }
 
 function start() {
-    document.getElementById('start').style.display = 'none';
+    // document.getElementById('start').style.display = 'none';
 
     pc = createPeerConnection();
 
@@ -189,6 +206,7 @@ function start() {
             document.getElementById('media').style.display = 'block';
         }
         navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
+            // document.querySelector('#local-video').srcObject = stream;
             stream.getTracks().forEach(function(track) {
                 pc.addTrack(track, stream);
             });

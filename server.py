@@ -114,10 +114,7 @@ async def register_db(app, loop):
 
     app.ws_connections = {}
     
-    app.chats = {
-        'a495fba2': {'audio_track': None, 'video_track': None, 'peer': '34551d92'},
-        '34551d92': {'audio_track': None, 'video_track': None, 'peer': 'a495fba2'},
-    }
+    app.chats = {}
 
     # app.add_track_queue = Queue()
 
@@ -144,9 +141,46 @@ async def feed(request, ws):
     while True:
         data = await ws.recv()
         data = json.loads(data)
-        if 'start' in data:
-            user_id = data.get('uid')
-            app.ws_connections[user_id] = ws
+        if data.get('type') == 'register':
+            name = data.get('name')
+            app.ws_connections[name] = ws
+            app.chats[name] = {
+                'audio_track': None, 'video_track': None,
+                'peer': None, 'pc': None, 'role': None
+            }
+
+
+async def call(request):
+    caller = request.json.get('from')
+    callee = request.json.get('to')
+    if callee in app.ws_connections:
+        ws = app.ws_connections[callee]
+        await ws.send(json.dumps({'type': 'call', 'from': caller, 'to': callee}))
+        return json_response({'status': 'success'})
+    return json_response({'status': 'error'})
+
+
+async def call_response(request):
+    caller = request.json.get('from')
+    callee = request.json.get('to')
+    caller_dict = app.chats[caller]
+    callee_dict = app.chats[callee]
+    if request.json.get('status'):
+        caller_dict['peer'] = callee
+        callee_dict['peer'] = caller
+        caller_dict['role'] = 'caller'
+        callee_dict['role'] = 'callee'
+
+        ws = app.ws_connections[caller]
+        await ws.send(json.dumps({
+            'type': 'call_response', 'from': callee, 'to': caller, 'status': 'accepted'
+        }))
+        return json_response({'status': 'success'})
+    else:
+        await ws.send(json.dumps({
+            'type': 'call_response', 'from': callee, 'to': caller, 'status': 'rejected'
+        }))
+        return json_response({'status': 'error'})
 
 
 async def add_stream(request):
@@ -166,7 +200,6 @@ async def add_stream(request):
                 """,
                 wall_id, stream_key, private
             )
-        app.chats[stream_key] = {'audio_track': None, 'video_track': None, 'peer': None}
         await inform_followers(user_id, stream)
         return json_response({'stream_id': stream['id']})
     else:
@@ -240,24 +273,18 @@ async def join_stream(request, stream_id):
     return html(content)
 
 
-async def call(request):
-    caller = request.json.get('from')
-    callee = request.json.get('to')
-    if callee in app.ws_connections:
-        ws = app.ws_connections[callee]
-        await ws.send(json.dumps({'type': 'call', 'from': caller, 'to': callee}))
-    return json_response({'status': 'success'})
-
-
 async def offer(request):
     params = request.json
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
     stream_key = params["stream_key"]
-    peer = app.chats[stream_key]['peer']
+    this_user = params["name"]
+    this_user_dict = app.chats[this_user]
+    peer = this_user_dict['peer']
 
     pc = RTCPeerConnection()
     pc_id = "PeerConnection(%s)" % uuid4()
     pcs.add(pc)
+    this_user_dict['pc'] = pc
 
     def log_info(msg, *args):
         logger.info(pc_id + " " + msg, *args)
@@ -271,6 +298,7 @@ async def offer(request):
         'vf': '"format=yuv420p"',
         'g': '60'
     })
+    # recorder = MediaRecorder(f'{this_user}.mp4')
 
     @pc.on("datachannel")
     def on_datachannel(channel):
@@ -287,32 +315,30 @@ async def offer(request):
             pcs.discard(pc)
 
     @pc.on("track")
-    async def on_track(track):
+    def on_track(track):
         log_info("Track %s received", track.kind)
 
+        app.chats[this_user]['pc'] = pc
         if track.kind == "audio":
-            app.chats[stream_key]['audio_track'] = track
-            # app.add_track_queue.put({'pc': pc, 'peer': peer, 'kind': track.kind})
-            while True:
-                if app.chats[peer]['audio_track']:
-                    pc.addTrack(app.chats[peer]['audio_track'])
-                    break
-                await asyncio.sleep(0.1)
             # pc.addTrack(track)
+            recorder.addTrack(track)
+            app.chats[this_user]['audio_track'] = track
+            if this_user_dict['role'] == 'callee':
+                peer_dict = app.chats[peer]
+                peer_dict['pc'].addTrack(track)
+                this_user_dict['pc'].addTrack(peer_dict['audio_track'])
         elif track.kind == "video":
             transformed_track = VideoTransformTrack(
                 track, transform=params["video_transform"]
             )
-            app.chats[stream_key]['video_track'] = transformed_track
-            while True:
-                if app.chats[peer]['video_track']:
-                    pc.addTrack(app.chats[peer]['video_track'])
-                    break
-                await asyncio.sleep(0.1)
-            # app.add_track_queue.put({'pc': pc, 'peer': peer, 'kind': track.kind})
+            recorder.addTrack(transformed_track)
             # pc.addTrack(track)
+            app.chats[this_user]['video_track'] = transformed_track
+            if this_user_dict['role'] == 'callee':
+                peer_dict = app.chats[peer]
+                peer_dict['pc'].addTrack(transformed_track)
+                this_user_dict['pc'].addTrack(peer_dict['video_track'])
 
-            # recorder.addTrack(track)
 
         @track.on("ended")
         async def on_ended():
@@ -321,13 +347,12 @@ async def offer(request):
 
     # handle offer
     await pc.setRemoteDescription(offer)
-    # await recorder.start()
+    await recorder.start()
 
     # send answer
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
     print(pc.getTransceivers()[0].currentDirection)
-
 
     return json_response({
         "sdp": pc.localDescription.sdp,
@@ -353,6 +378,7 @@ if __name__ == "__main__":
     app.add_route(join_stream, '/stream/<stream_id:int>')
     app.add_route(offer, '/offer/', methods=["GET", "POST"])
     app.add_route(call, '/call/', methods=["GET", "POST"])
+    app.add_route(call_response, '/call-response/', methods=["GET", "POST"])
     app.add_websocket_route(feed, '/ws')
 
     # app.add_task(notify_server_started_after_five_seconds)

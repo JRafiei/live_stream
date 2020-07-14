@@ -1,104 +1,115 @@
 <html>
 <head>
-    <meta charset="UTF-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WebRTC demo</title>
-    <style>
-    button {
-        padding: 8px 16px;
-    }
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/static/skeleton.min.css" integrity="sha512-EZLkOqwILORob+p0BXZc+Vm3RgJBOe1Iq/0fiI7r/wJgzOFZMlsqTa29UEl6v6U6gsV4uIpsNZoV32YZqrCRCQ==" crossorigin="anonymous" />
+  <title>WebRTC demo</title>
+  <style>
 
-    pre {
-        overflow-x: hidden;
-        overflow-y: auto;
-    }
+  pre {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
 
-    video {
-        width: 100%;
-        height: 400px;
-    }
+  video {
+    width: 100%;
+    height: 400px;
+  }
 
-    .option {
-        margin-bottom: 8px;
-    }
-
-    #media {
-        max-width: 1280px;
-    }
-    </style>
+  .option {
+    margin-bottom: 8px;
+  }
+  .columns {
+    margin-left: 2%;
+  }
+  </style>
 </head>
 <body>
+  <div class="container">
 
-<h2>Options</h2>
-<div class="option">
-    <input id="use-audio" checked="checked" type="checkbox"/>
-    <label for="use-audio">Use audio</label>
-    <select id="audio-codec">
+    <h2>Options</h2>
+    <div class="option">
+      <label for="use-audio">Use audio</label>
+      <input id="use-audio" type="checkbox" checked="checked" />
+      <select id="audio-codec">
         <option value="default" selected>Default codecs</option>
         <option value="opus/48000/2">Opus</option>
         <option value="PCMU/8000">PCMU</option>
         <option value="PCMA/8000">PCMA</option>
-    </select>
-</div>
-<div class="option">
-    <input id="use-video" checked="checked" type="checkbox"/>
-    <label for="use-video">Use video</label>
-    <select id="video-resolution">
+      </select>
+    </div>
+    <div class="option">
+      <label for="use-video">Use video</label>
+      <input id="use-video" checked="checked" type="checkbox"/>
+      <select id="video-resolution">
         <option value="" selected>Default resolution</option>
         <option value="320x240">320x240</option>
         <option value="640x480">640x480</option>
         <option value="960x540">960x540</option>
         <option value="1280x720">1280x720</option>
-    </select>
-    <select id="video-transform">
+      </select>
+      <select id="video-transform">
         <option value="none" selected>No transform</option>
         <option value="edges">Edge detection</option>
         <option value="cartoon">Cartoon effect</option>
         <option value="rotate">Rotate</option>
-    </select>
-    <select id="video-codec">
+      </select>
+      <select id="video-codec">
         <option value="default" selected>Default codecs</option>
         <option value="VP8/90000">VP8</option>
         <option value="H264/90000">H264</option>
-    </select>
-</div>
-<div class="option">
-    <input id="use-stun" type="checkbox"/>
-    <label for="use-stun">Use STUN server</label>
-</div>
-
-<button id="start" onclick="start()">Start</button>
-<button id="call" onclick="call()">Call</button>
-<button id="stop" style="display: none" onclick="stop()">Stop</button>
-
-<h2>State</h2>
-<p>
-    ICE gathering state: <span id="ice-gathering-state"></span>
-</p>
-<p>
-    ICE connection state: <span id="ice-connection-state"></span>
-</p>
-<p>
-    Signaling state: <span id="signaling-state"></span>
-</p>
-
-<div id="media" style="display: none;">
-    <h2>Media</h2>
-
-    <audio id="audio" autoplay="true"></audio>
-    <video id="video" autoplay="true" playsinline="true"></video>
-</div>
-
-<h2>SDP</h2>
-
-<h3>Offer</h3>
-<pre id="offer-sdp"></pre>
-
-<h3>Answer</h3>
-<pre id="answer-sdp"></pre>
-<script>
+      </select>
+    </div>
+    <div class="option">
+      <label for="use-stun">Use STUN server</label>
+      <input id="use-stun" type="checkbox"/>
+    </div>
+    
+    <div id="register">
+      <input id="name" type="text" placeholder="Enter your name">
+      <button onclick="register()">Register</button>
+    </div>
+    
+    <div id="call">
+      <input id="to" type="text" placeholder="to">
+      <button onclick="call()">Call</button>
+    </div>
+    
+    <button id="start" onclick="start()">Start</button>
+    <button id="stop" style="display: none" onclick="stop()">Stop</button>
+    
+    <h2>State</h2>
+    <p>
+      ICE gathering state: <span id="ice-gathering-state"></span>
+    </p>
+    <p>
+      ICE connection state: <span id="ice-connection-state"></span>
+    </p>
+    <p>
+      Signaling state: <span id="signaling-state"></span>
+    </p>
+    
+    <div id="media" style="display: none;" class="row">
+      <h2>Media</h2>
+      <div class="six columns"><video id="local-video" autoplay="true" playsinline="true"></video></div>
+      <div class="six columns"><video id="video" autoplay="true" playsinline="true"></video></div>
+    
+      <audio id="audio" autoplay="true"></audio>
+      
+    </div>
+    
+    <h2>SDP</h2>
+    
+    <h3>Offer</h3>
+    <pre id="offer-sdp"></pre>
+    
+    <h3>Answer</h3>
+    <pre id="answer-sdp"></pre>
+  </div>
+  <script>
     var stream_key = "{{stream_key}}";
-</script>
-<script src="/static/client.js"></script>
+  </script>
+
+  <script src="/static/client.js"></script>
 </body>
 </html>
