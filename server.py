@@ -163,6 +163,7 @@ async def call(request):
 async def call_response(request):
     caller = request.json.get('from')
     callee = request.json.get('to')
+    stream_key = request.json.get('stream_key')
     caller_dict = app.chats[caller]
     callee_dict = app.chats[callee]
     if request.json.get('status'):
@@ -175,7 +176,21 @@ async def call_response(request):
         await ws.send(json.dumps({
             'type': 'call_response', 'from': callee, 'to': caller, 'status': 'accepted'
         }))
-        return json_response({'status': 'success'})
+        peer_stream_key = uuid4().hex[:8]
+        async with app.config.pg_pool.acquire() as connection:
+            qresult = await connection.execute(
+                """
+                update stream
+                set peer_stream_key = $1
+                where stream_key = $2
+                """,
+                peer_stream_key, stream_key
+            )
+        for ws in app.ws_connections.values():
+            await ws.send(json.dumps({
+                'type': 'peer-accept', 'peer_stream_key': peer_stream_key
+            }))
+        return json_response({'status': 'success', 'stream_key': peer_stream_key})
     else:
         await ws.send(json.dumps({
             'type': 'call_response', 'from': callee, 'to': caller, 'status': 'rejected'

@@ -26,27 +26,32 @@ socket.onmessage = function(event) {
             body: JSON.stringify({
                 from: data.from,
                 to: data.to,
+                stream_key: stream_key,
                 status: status
             }),
             headers: {'Content-Type': 'application/json'},
             method: 'POST'
-        });
+        }).then(res => res.json())
+        .then(data => {
+            stream_key = data.stream_key;
+            start();
+         });
     }
 };
   
-  socket.onclose = function(event) {
-    if (event.wasClean) {
-      console.log(`[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`);
-    } else {
-      // e.g. server process killed or network down
-      // event.code is usually 1006 in this case
-      console.log('[close] Connection died');
-    }
-  };
-  
-  socket.onerror = function(error) {
-    console.log(`[error] ${error.message}`);
-  };
+socket.onclose = function(event) {
+if (event.wasClean) {
+    console.log(`[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+} else {
+    // e.g. server process killed or network down
+    // event.code is usually 1006 in this case
+    console.log('[close] Connection died');
+}
+};
+
+socket.onerror = function(error) {
+console.log(`[error] ${error.message}`);
+};
 
 function call() {
     fetch('/call', {
@@ -206,7 +211,7 @@ function start() {
             document.getElementById('media').style.display = 'block';
         }
         navigator.mediaDevices.getUserMedia(constraints).then(function(stream) {
-            // document.querySelector('#local-video').srcObject = stream;
+            document.querySelector('#local-video').srcObject = stream;
             stream.getTracks().forEach(function(track) {
                 pc.addTrack(track, stream);
             });
