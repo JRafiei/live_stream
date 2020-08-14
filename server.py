@@ -100,7 +100,7 @@ class VideoTransformTrack(MediaStreamTrack):
 async def register_db(app, loop):
     # Create a database connection pool
     conn = "postgres://{user}:{password}@{host}:{port}/{database}".format(
-        user='postgres', password='Feanor90', host='localhost',
+        user='postgres', password='secret', host='localhost',
         port=5432, database='live_stream'
     )
     app.config['pg_pool'] = await create_pool(
