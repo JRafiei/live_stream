@@ -7,8 +7,7 @@ from asyncpg import create_pool
 from aiortc import MediaStreamTrack, RTCPeerConnection, RTCSessionDescription
 from aiortc.contrib.media import MediaBlackhole, MediaPlayer, MediaRecorder
 from queue import Queue
-from sanic import Sanic
-from sanic.response import json as json_response, html
+from sanic import Sanic, response
 from sanic.websocket import WebSocketProtocol
 from uuid import uuid4
 import cv2
@@ -156,8 +155,8 @@ async def call(request):
     if callee in app.ws_connections:
         ws = app.ws_connections[callee]
         await ws.send(json.dumps({'type': 'call', 'from': caller, 'to': callee}))
-        return json_response({'status': 'success'})
-    return json_response({'status': 'error'})
+        return response.json({'status': 'success'})
+    return response.json({'status': 'error'})
 
 
 async def call_response(request):
@@ -190,12 +189,12 @@ async def call_response(request):
             await ws.send(json.dumps({
                 'type': 'peer-accept', 'peer_stream_key': peer_stream_key
             }))
-        return json_response({'status': 'success', 'stream_key': peer_stream_key})
+        return response.json({'status': 'success', 'stream_key': peer_stream_key})
     else:
         await ws.send(json.dumps({
             'type': 'call_response', 'from': callee, 'to': caller, 'status': 'rejected'
         }))
-        return json_response({'status': 'error'})
+        return response.json({'status': 'error'})
 
 
 async def add_stream(request):
@@ -216,11 +215,11 @@ async def add_stream(request):
                 wall_id, stream_key, private
             )
         await inform_followers(user_id, stream)
-        return json_response({'stream_id': stream['id']})
+        return response.json({'stream_id': stream['id']})
     else:
         with open('templates/add.html') as f:
             content = f.read()
-            return html(content)
+            return response.html(content)
 
 
 async def send_stream(request, stream_id):
@@ -233,12 +232,12 @@ async def send_stream(request, stream_id):
             stream_id
         )
         if not stream:
-            return html('Permission_denied')
+            return response.html('Permission_denied')
         stream_key = stream['stream_key']
     with open('templates/send.html') as f:
         content = f.read()
         content = content.replace('{{stream_key}}', stream['stream_key'])
-        return html(content)
+        return response.html(content)
 
 
 async def home(request):
@@ -247,7 +246,7 @@ async def home(request):
         result = []
         for record in records:
             result.append(dict(record))
-        return json_response({"result": result})
+        return response.json({"result": result})
 
 
 async def join_stream(request, stream_id):
@@ -261,14 +260,14 @@ async def join_stream(request, stream_id):
             stream_id
         )
         if not stream:
-            return html('Permission_denied')
+            return response.html('Permission_denied')
 
     if stream['private']:
         if stream['wall_id']:
             # get wall followers
             followers = [1,3,6]
             if user_id not in followers:
-                return html('Permission_denied')
+                return response.html('Permission_denied')
         else:
             async with app.config.pg_pool.acquire() as connection:
                 user_record = await connection.fetchrow(
@@ -280,13 +279,13 @@ async def join_stream(request, stream_id):
                     user_id, stream_id
                 )
                 if not user_record:
-                    return html('Permission_denied')
+                    return response.html('Permission_denied')
 
     with open('templates/player.html') as f:
         content = f.read()
         content = content.replace('{{stream_key}}', stream['stream_key'])
         content = content.replace('{{peer_stream_key}}', stream['peer_stream_key'])
-    return html(content)
+    return response.html(content)
 
 
 async def offer(request):
@@ -373,7 +372,7 @@ async def offer(request):
     await pc.setLocalDescription(answer)
     print(pc.getTransceivers()[0].currentDirection)
 
-    return json_response({
+    return response.json({
         "sdp": pc.localDescription.sdp,
         "type": pc.localDescription.type
     })
