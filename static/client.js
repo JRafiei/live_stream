@@ -18,7 +18,6 @@ socket.onmessage = function(event) {
         let status;
         if (confirm(`${data.from} is calling you. accept the call?`)){
             status = true;
-            start();
         } else {
             status = false;
         }
@@ -62,6 +61,7 @@ function call() {
         headers: {'Content-Type': 'application/json'},
         method: 'POST'
     });
+    start();
 }
 
 function register() {

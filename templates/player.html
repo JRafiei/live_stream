@@ -23,17 +23,18 @@
       <div class="card">
         <div class="card-content">
           <span class="card-title">live stream (4)</span>
-          <video-js id="me" width="640" height="360" class="vjs-default-skin" controls>
+          
+          <video id="me" width="640" height="360" class="video-js" controls muted>
             <source
-              src="http://localhost:8080/hls/a495fba2.m3u8"
+              src="http://localhost:8080/hls/{{stream_key}}.m3u8"
               type="application/x-mpegURL">
-          </video-js>
+          </video>
           <br><br>
-          <video-js id="other" width="640" height="360" class="vjs-default-skin" controls>
-            <source
-              src="http://localhost:8080/hls/34551d92.m3u8"
-              type="application/x-mpegURL">
-          </video-js>
+
+          <div id="register">
+            <input id="name" type="text" placeholder="Enter your name">
+            <button onclick="register()">Register</button>
+          </div>
         </div>
       </div>
       </div>
@@ -42,11 +43,84 @@
 
   <script src="https://vjs.zencdn.net/7.8.2/video.js"></script>
   <script>
+    function createPeerVideo(stream_key) {
+      const cardContent = document.querySelector('.card-content');
+      const registerDiv = document.querySelector('#register');
+      const peerVideo = document.createElement('video');
+      peerVideo.id = 'peer';
+      peerVideo.className = "video-js";
+      peerVideo.setAttribute('width', 640);
+      peerVideo.setAttribute('height', 360);
+      peerVideo.setAttribute('controls', '');
+      peerVideo.setAttribute('muted', '');
+      peerVideo.innerHTML = `
+      <source
+          src="http://localhost:8080/hls/${stream_key}.m3u8"
+          type="application/x-mpegURL">
+      `;
+      console.log(peerVideo);
+      cardContent.insertBefore(peerVideo, registerDiv);
+      videojs(peerVideo.id).ready(function() {
+        peerVideo.play();
+      });
+      return peerVideo;
+    }
+
+    const peer_stream_key = '{{peer_stream_key}}';
+    if (peer_stream_key) {createPeerVideo(peer_stream_key)};
+    let socket = new WebSocket("wss://192.168.1.15:8443/ws");
+
+    socket.onopen = function(e) {
+        console.log("[open] Connection established");
+    };
+  
+    socket.onmessage = function(event) {
+        console.log(`[message] Data received from server: ${event.data}`);
+        let data;
+        try {
+            data = JSON.parse(event.data);
+        } catch (error) {
+            console.error(error);
+            data = {};
+        }
+        if (data.type == "peer-accept") {
+          const peerVideo = document.querySelector('#peer');
+          if (peerVideo) {
+            peerVideo.remove();
+          }
+          createPeerVideo(data.peer_stream_key);
+        }
+    };
+  
+    socket.onclose = function(event) {
+      if (event.wasClean) {
+        console.log(`[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+      } else {
+        // e.g. server process killed or network down
+        // event.code is usually 1006 in this case
+        console.log('[close] Connection died');
+      }
+    };
+    
+    socket.onerror = function(error) {
+      console.log(`[error] ${error.message}`);
+    };
+
+    function register() {
+        const name = document.querySelector("#register #name").value;
+        socket.send(JSON.stringify({name: name, type: 'register'}));
+    }
+
     videojs('me').ready(function() {
-      this.play();
-    });
-    videojs('other').ready(function() {
-      this.play();
+      var promise = this.play();
+
+      if (promise !== undefined) {
+        promise.then(function() {
+          // Autoplay started!
+        }).catch(function(error) {
+          // Autoplay was prevented.
+        });
+      } 
     });
   </script>
 </body>

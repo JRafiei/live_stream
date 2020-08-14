@@ -285,6 +285,7 @@ async def join_stream(request, stream_id):
     with open('templates/player.html') as f:
         content = f.read()
         content = content.replace('{{stream_key}}', stream['stream_key'])
+        content = content.replace('{{peer_stream_key}}', stream['peer_stream_key'])
     return html(content)
 
 
@@ -292,14 +293,10 @@ async def offer(request):
     params = request.json
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
     stream_key = params["stream_key"]
-    this_user = params["name"]
-    this_user_dict = app.chats[this_user]
-    peer = this_user_dict['peer']
 
     pc = RTCPeerConnection()
     pc_id = "PeerConnection(%s)" % uuid4()
     pcs.add(pc)
-    this_user_dict['pc'] = pc
 
     def log_info(msg, *args):
         logger.info(pc_id + " " + msg, *args)
@@ -333,13 +330,17 @@ async def offer(request):
     def on_track(track):
         log_info("Track %s received", track.kind)
 
-        app.chats[this_user]['pc'] = pc
+        this_user = params["name"]
+        this_user_dict = app.chats[this_user]
+        peer = this_user_dict['peer']
+        peer_dict = app.chats.get(peer)
+        this_user_dict['pc'] = pc
+
         if track.kind == "audio":
             # pc.addTrack(track)
             recorder.addTrack(track)
-            app.chats[this_user]['audio_track'] = track
+            this_user_dict['audio_track'] = track
             if this_user_dict['role'] == 'callee':
-                peer_dict = app.chats[peer]
                 peer_dict['pc'].addTrack(track)
                 this_user_dict['pc'].addTrack(peer_dict['audio_track'])
         elif track.kind == "video":
@@ -348,15 +349,18 @@ async def offer(request):
             )
             recorder.addTrack(transformed_track)
             # pc.addTrack(track)
-            app.chats[this_user]['video_track'] = transformed_track
+            this_user_dict['video_track'] = transformed_track
             if this_user_dict['role'] == 'callee':
-                peer_dict = app.chats[peer]
                 peer_dict['pc'].addTrack(transformed_track)
                 this_user_dict['pc'].addTrack(peer_dict['video_track'])
 
 
         @track.on("ended")
         async def on_ended():
+            if this_user_dict:
+                this_user_dict['peer'] = None
+            if peer_dict:
+                peer_dict['peer'] = None
             log_info("Track %s ended", track.kind)
             await recorder.stop()
 
