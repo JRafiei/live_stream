@@ -238,6 +238,7 @@ async def send_stream(request, stream_id):
     with open('templates/send.html') as f:
         content = f.read()
         content = content.replace('{{stream_key}}', stream['stream_key'])
+        content = content.replace('{{ws_url}}', request.host)
         return html(content)
 
 
