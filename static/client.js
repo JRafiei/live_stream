@@ -1,4 +1,4 @@
-let socket = new WebSocket("wss://192.168.1.15:8443/ws");
+let socket = new WebSocket(ws_url);
 
 socket.onopen = function(e) {
     console.log("[open] Connection established");

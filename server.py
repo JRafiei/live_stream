@@ -237,6 +237,7 @@ async def send_stream(request, stream_id):
     with open('templates/send.html') as f:
         content = f.read()
         content = content.replace('{{stream_key}}', stream['stream_key'])
+        content = content.replace('{{ws_url}}', request.host)
         return response.html(content)
 
 
@@ -284,7 +285,10 @@ async def join_stream(request, stream_id):
     with open('templates/player.html') as f:
         content = f.read()
         content = content.replace('{{stream_key}}', stream['stream_key'])
-        content = content.replace('{{peer_stream_key}}', stream['peer_stream_key'])
+        peer_stream_key = ''
+        if stream['peer_stream_key']:
+            peer_stream_key = stream['peer_stream_key']
+        content = content.replace('{{peer_stream_key}}', peer_stream_key)
     return response.html(content)
 
 

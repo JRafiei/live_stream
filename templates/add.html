@@ -51,7 +51,7 @@
         private: private,
         user_id: parseInt(user_id)
       }
-      fetch('http://localhost:8000/stream/add', {
+      fetch('/stream/add', {
         method: 'POST', // *GET, POST, PUT, DELETE, etc.
         headers: {
           'Content-Type': 'application/json'
