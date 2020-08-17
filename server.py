@@ -24,52 +24,53 @@ logger = logging.getLogger("pc")
 
 pcs = set()
 
-
-server_url = 'https://213.108.240.86:2310'
+server_host = '213.108.240.86'
+server_port = 2310
+server_url = f'https://{server_host}:{server_port}'
 ws_url = 'wss://213.108.240.86:2310/ws'
 rtmp_url = 'rtmp://localhost:1935/show'
 hls_url = 'https://213.108.240.86:2309'
 
 
-users = {}
-session = {}
-@app.middleware('request')
-async def add_session(request):
-    request.ctx.user = users[0]
+# users = {}
+# session = {}
+# @app.middleware('request')
+# async def add_session(request):
+#     request.ctx.user = users[0]
 
 
-@app.route('/register', methods=['GET', 'POST'])
-async def register(request):
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        if users:
-            latest_user_id = max(users.keys())
-            user_id = latest_user_id + 1
-        else:
-            user_id = 1
-        users[username] = {
-            'user_id': user_id,
-            'password': request.args.get('password')
-        }
-        return response.json({'status': 'success'})
-    else:
-        with open('templates/register.html') as f:
-            content = f.read()
-            return response.html(content)
+# @app.route('/register', methods=['GET', 'POST'])
+# async def register(request):
+#     if request.method == 'POST':
+#         username = request.form.get('username')
+#         password = request.form.get('password')
+#         if users:
+#             latest_user_id = max(users.keys())
+#             user_id = latest_user_id + 1
+#         else:
+#             user_id = 1
+#         users[username] = {
+#             'user_id': user_id,
+#             'password': request.args.get('password')
+#         }
+#         return response.json({'status': 'success'})
+#     else:
+#         with open('templates/register.html') as f:
+#             content = f.read()
+#             return response.html(content)
 
 
-@app.route('/login', methods=['GET', 'POST'])
-async def login(request):
-    if request.method == 'POST':
-        username = request.form.get('username')
-        password = request.form.get('password')
-        if users.get(username) and users[username]['password'] == password:
-            session
-            return response.json({'status': 'success'})
-    with open('templates/login.html') as f:
-        content = f.read()
-        return response.html(content)
+# @app.route('/login', methods=['GET', 'POST'])
+# async def login(request):
+#     if request.method == 'POST':
+#         username = request.form.get('username')
+#         password = request.form.get('password')
+#         if users.get(username) and users[username]['password'] == password:
+#             session
+#             return response.json({'status': 'success'})
+#     with open('templates/login.html') as f:
+#         content = f.read()
+#         return response.html(content)
 
 class VideoTransformTrack(MediaStreamTrack):
     """
@@ -452,4 +453,4 @@ if __name__ == "__main__":
     app.add_websocket_route(feed, '/ws')
 
     # app.add_task(notify_server_started_after_five_seconds)
-    app.run(host="0.0.0.0", port=8443, ssl=context, workers=1)
+    app.run(host=server_host, port=server_port, ssl=context, workers=1)
