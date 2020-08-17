@@ -25,6 +25,52 @@ logger = logging.getLogger("pc")
 pcs = set()
 
 
+server_url = 'https://213.108.240.86:2310'
+ws_url = 'wss://213.108.240.86:2310/ws'
+rtmp_url = 'rtmp://localhost:1935/show'
+hls_url = 'https://213.108.240.86:2309'
+
+
+users = {}
+session = {}
+@app.middleware('request')
+async def add_session(request):
+    request.ctx.user = users[0]
+
+
+@app.route('/register', methods=['GET', 'POST'])
+async def register(request):
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        if users:
+            latest_user_id = max(users.keys())
+            user_id = latest_user_id + 1
+        else:
+            user_id = 1
+        users[username] = {
+            'user_id': user_id,
+            'password': request.args.get('password')
+        }
+        return response.json({'status': 'success'})
+    else:
+        with open('templates/register.html') as f:
+            content = f.read()
+            return response.html(content)
+
+
+@app.route('/login', methods=['GET', 'POST'])
+async def login(request):
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        if users.get(username) and users[username]['password'] == password:
+            session
+            return response.json({'status': 'success'})
+    with open('templates/login.html') as f:
+        content = f.read()
+        return response.html(content)
+
 class VideoTransformTrack(MediaStreamTrack):
     """
     A video stream track that transforms frames from an another track.
@@ -237,7 +283,7 @@ async def send_stream(request, stream_id):
     with open('templates/send.html') as f:
         content = f.read()
         content = content.replace('{{stream_key}}', stream['stream_key'])
-        content = content.replace('{{ws_url}}', request.host)
+        content = content.replace('{{ws_url}}', ws_url)
         return response.html(content)
 
 
@@ -285,6 +331,8 @@ async def join_stream(request, stream_id):
     with open('templates/player.html') as f:
         content = f.read()
         content = content.replace('{{stream_key}}', stream['stream_key'])
+        content = content.replace('{{ws_url}}', ws_url)
+        content = content.replace('{{hls_url}}', hls_url)
         peer_stream_key = ''
         if stream['peer_stream_key']:
             peer_stream_key = stream['peer_stream_key']
@@ -304,7 +352,7 @@ async def offer(request):
     def log_info(msg, *args):
         logger.info(pc_id + " " + msg, *args)
 
-    recorder = MediaRecorder(f'rtmp://localhost:1935/show/{stream_key}', format='flv', options={
+    recorder = MediaRecorder(f'{rtmp_url}/{stream_key}', format='flv', options={
         'framerate': '1',
         'video_size': '720x404', 
         'vcodec': 'libx264',

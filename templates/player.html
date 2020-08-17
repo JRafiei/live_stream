@@ -26,7 +26,7 @@
           
           <video id="me" width="640" height="360" class="video-js" controls muted>
             <source
-              src="http://localhost:8080/hls/{{stream_key}}.m3u8"
+              src="{{hls_url}}/{{stream_key}}.m3u8"
               type="application/x-mpegURL">
           </video>
           <br><br>
@@ -55,7 +55,7 @@
       peerVideo.setAttribute('muted', '');
       peerVideo.innerHTML = `
       <source
-          src="http://localhost:8080/hls/${stream_key}.m3u8"
+          src="{{hls_url}}/${stream_key}.m3u8"
           type="application/x-mpegURL">
       `;
       console.log(peerVideo);
@@ -68,7 +68,7 @@
 
     const peer_stream_key = '{{peer_stream_key}}';
     if (peer_stream_key) {createPeerVideo(peer_stream_key)};
-    let socket = new WebSocket("wss://192.168.1.15:8443/ws");
+    let socket = new WebSocket("{{ws_url}}");
 
     socket.onopen = function(e) {
         console.log("[open] Connection established");
