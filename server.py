@@ -27,9 +27,9 @@ pcs = set()
 server_host = '213.108.240.86'
 server_port = 2310
 server_url = f'https://{server_host}:{server_port}'
-ws_url = 'wss://213.108.240.86:2310/ws'
-rtmp_url = 'rtmp://localhost:1935/show'
-hls_url = 'https://213.108.240.86:2309'
+ws_url = f'wss://{server_host}:{server_port}/ws'
+rtmp_url = 'rtmp://localhost:2308/show'
+hls_url = f'https://{server_host}:2309'
 
 
 # users = {}
@@ -190,16 +190,17 @@ async def feed(request, ws):
         if data.get('type') == 'register':
             name = data.get('name')
             app.ws_connections[name] = ws
-            app.chats[name] = {
-                'audio_track': None, 'video_track': None,
-                'peer': None, 'pc': None, 'role': None
-            }
 
 
 async def call(request):
     caller = request.json.get('from')
     callee = request.json.get('to')
     if callee in app.ws_connections:
+        app.chats[caller] = {
+            'audio_track': None, 'video_track': None,
+            'peer': None, 'pc': None, 'role': 'caller'
+        }
+
         ws = app.ws_connections[callee]
         await ws.send(json.dumps({'type': 'call', 'from': caller, 'to': callee}))
         return response.json({'status': 'success'})
@@ -209,20 +210,19 @@ async def call(request):
 async def call_response(request):
     caller = request.json.get('from')
     callee = request.json.get('to')
-    stream_key = request.json.get('stream_key')
-    caller_dict = app.chats[caller]
-    callee_dict = app.chats[callee]
     if request.json.get('status'):
-        caller_dict['peer'] = callee
-        callee_dict['peer'] = caller
-        caller_dict['role'] = 'caller'
-        callee_dict['role'] = 'callee'
+        stream_key = request.json.get('stream_key')
+        app.chats[callee] = {
+            'audio_track': None, 'video_track': None,
+            'peer': caller, 'pc': None, 'role': 'callee'
+        }
+        app.chats[caller]['peer'] = callee
 
         ws = app.ws_connections[caller]
         await ws.send(json.dumps({
             'type': 'call_response', 'from': callee, 'to': caller, 'status': 'accepted'
         }))
-        peer_stream_key = uuid4().hex[:8]
+        peer_stream_key = generate_stream_key()
         async with app.config.pg_pool.acquire() as connection:
             qresult = await connection.execute(
                 """
@@ -249,7 +249,7 @@ async def add_stream(request):
         user_id = request.json.get('user_id')
         wall_id = request.json.get('wall_id')
         private = request.json.get('private')
-        stream_key = uuid4().hex[:8]
+        stream_key = generate_stream_key()
         async with app.config.pg_pool.acquire() as connection:
             stream = await connection.fetchrow(
                 """
@@ -383,15 +383,17 @@ async def offer(request):
         log_info("Track %s received", track.kind)
 
         this_user = params["name"]
-        this_user_dict = app.chats[this_user]
-        peer = this_user_dict['peer']
-        peer_dict = app.chats.get(peer)
-        this_user_dict['pc'] = pc
+        this_user_dict = app.chats.get(this_user)
+        if this_user_dict:
+            peer = this_user_dict['peer']
+            peer_dict = app.chats.get(peer)
+            this_user_dict['pc'] = pc
 
         if track.kind == "audio":
             # pc.addTrack(track)
             recorder.addTrack(track)
-            this_user_dict['audio_track'] = track
+            if this_user_dict:
+                this_user_dict['audio_track'] = track
             if this_user_dict['role'] == 'callee':
                 peer_dict['pc'].addTrack(track)
                 this_user_dict['pc'].addTrack(peer_dict['audio_track'])
@@ -401,7 +403,8 @@ async def offer(request):
             )
             recorder.addTrack(transformed_track)
             # pc.addTrack(track)
-            this_user_dict['video_track'] = transformed_track
+            if this_user_dict:
+                this_user_dict['video_track'] = transformed_track
             if this_user_dict['role'] == 'callee':
                 peer_dict['pc'].addTrack(transformed_track)
                 this_user_dict['pc'].addTrack(peer_dict['video_track'])
@@ -442,6 +445,10 @@ async def inform_followers(user_id, stream):
             pass
 
 
+def generate_stream_key():
+    return uuid4().hex[:8]
+
+
 if __name__ == "__main__":
     app.add_route(home, '/')
     app.add_route(add_stream, '/stream/add', methods=["GET", "POST"])
@@ -453,4 +460,4 @@ if __name__ == "__main__":
     app.add_websocket_route(feed, '/ws')
 
     # app.add_task(notify_server_started_after_five_seconds)
-    app.run(host=server_host, port=server_port, ssl=context, workers=1)
+    app.run(host='0.0.0.0', port=server_port, ssl=context, workers=1)
