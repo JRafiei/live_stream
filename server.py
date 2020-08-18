@@ -195,8 +195,10 @@ async def feed(request, ws):
 async def call(request):
     caller = request.json.get('from')
     callee = request.json.get('to')
+    stream_key = request.json.get('stream_key')
     if callee in app.ws_connections:
-        app.chats[caller] = {
+        app.chats[stream_key] = {}
+        app.chats[stream_key][caller] = {
             'audio_track': None, 'video_track': None,
             'peer': None, 'pc': None, 'role': 'caller'
         }
@@ -212,11 +214,11 @@ async def call_response(request):
     callee = request.json.get('to')
     if request.json.get('status'):
         stream_key = request.json.get('stream_key')
-        app.chats[callee] = {
+        app.chats[stream_key][callee] = {
             'audio_track': None, 'video_track': None,
             'peer': caller, 'pc': None, 'role': 'callee'
         }
-        app.chats[caller]['peer'] = callee
+        app.chats[stream_key][caller]['peer'] = callee
 
         ws = app.ws_connections[caller]
         await ws.send(json.dumps({
@@ -382,40 +384,39 @@ async def offer(request):
     def on_track(track):
         log_info("Track %s received", track.kind)
 
-        this_user = params["name"]
-        this_user_dict = app.chats.get(this_user)
-        if this_user_dict:
-            peer = this_user_dict['peer']
-            peer_dict = app.chats.get(peer)
+        stream_chat_dict = app.chats.get(stream_key)
+        if stream_chat_dict:
+            this_user = params["name"]
+            this_user_dict = stream_chat_dict[this_user]
             this_user_dict['pc'] = pc
+            peer_dict = None
+            if this_user_dict['role'] == 'callee':
+                peer = this_user_dict['peer']
+                peer_dict = stream_chat_dict[peer]
 
         if track.kind == "audio":
             # pc.addTrack(track)
             recorder.addTrack(track)
-            if this_user_dict:
+            if stream_chat_dict:
                 this_user_dict['audio_track'] = track
-            if this_user_dict['role'] == 'callee':
-                peer_dict['pc'].addTrack(track)
-                this_user_dict['pc'].addTrack(peer_dict['audio_track'])
+                if peer_dict:
+                    peer_dict['pc'].addTrack(track)
+                    this_user_dict['pc'].addTrack(peer_dict['audio_track'])
         elif track.kind == "video":
             transformed_track = VideoTransformTrack(
                 track, transform=params["video_transform"]
             )
+            # pc.addTrack(transformed_track)
             recorder.addTrack(transformed_track)
-            # pc.addTrack(track)
-            if this_user_dict:
+            if stream_chat_dict:
                 this_user_dict['video_track'] = transformed_track
-            if this_user_dict['role'] == 'callee':
-                peer_dict['pc'].addTrack(transformed_track)
-                this_user_dict['pc'].addTrack(peer_dict['video_track'])
+                if peer_dict:
+                    peer_dict['pc'].addTrack(transformed_track)
+                    this_user_dict['pc'].addTrack(peer_dict['video_track'])
 
 
         @track.on("ended")
         async def on_ended():
-            if this_user_dict:
-                this_user_dict['peer'] = None
-            if peer_dict:
-                peer_dict['peer'] = None
             log_info("Track %s ended", track.kind)
             await recorder.stop()
 

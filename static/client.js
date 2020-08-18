@@ -56,7 +56,8 @@ function call() {
     fetch('/call', {
         body: JSON.stringify({
             from: document.querySelector('#register #name').value,
-            to: document.querySelector('#to').value
+            to: document.querySelector('#to').value,
+            stream_key: stream_key
         }),
         headers: {'Content-Type': 'application/json'},
         method: 'POST'
