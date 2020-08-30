@@ -26,6 +26,7 @@ socket.onmessage = function(event) {
                 from: data.from,
                 to: data.to,
                 stream_key: stream_key,
+                stream_id: stream_id,
                 status: status
             }),
             headers: {'Content-Type': 'application/json'},
@@ -57,7 +58,7 @@ function call() {
         body: JSON.stringify({
             from: document.querySelector('#register #name').value,
             to: document.querySelector('#to').value,
-            stream_key: stream_key
+            stream_id: stream_id
         }),
         headers: {'Content-Type': 'application/json'},
         method: 'POST'
@@ -156,6 +157,7 @@ function negotiate() {
                 type: offer.type,
                 video_transform: document.getElementById('video-transform').value,
                 stream_key: stream_key,
+                stream_id: stream_id,
                 name: document.querySelector('#register #name').value
             }),
             headers: {

@@ -144,7 +144,7 @@ async def register_db(app, loop):
 #         await asyncio.sleep(3)
 
 
-async def feed(request, ws):
+async def ws_handler(request, ws):
     while True:
         data = await ws.recv()
         data = json.loads(data)
@@ -156,10 +156,10 @@ async def feed(request, ws):
 async def call(request):
     caller = request.json.get('from')
     callee = request.json.get('to')
-    stream_key = request.json.get('stream_key')
+    stream_id = request.json.get('stream_id')
     if callee in app.ws_connections:
-        app.chats[stream_key] = {}
-        app.chats[stream_key][caller] = {
+        app.chats[stream_id] = {}
+        app.chats[stream_id][caller] = {
             'audio_track': None, 'video_track': None,
             'peer': None, 'pc': None, 'role': 'caller'
         }
@@ -173,32 +173,25 @@ async def call(request):
 async def call_response(request):
     caller = request.json.get('from')
     callee = request.json.get('to')
+    stream_id = request.json.get('stream_id')
     if request.json.get('status'):
-        stream_key = request.json.get('stream_key')
-        app.chats[stream_key][callee] = {
+        app.chats[stream_id][callee] = {
             'audio_track': None, 'video_track': None,
             'peer': caller, 'pc': None, 'role': 'callee'
         }
-        app.chats[stream_key][caller]['peer'] = callee
+        app.chats[stream_id][caller]['peer'] = callee
 
         ws = app.ws_connections[caller]
         await ws.send(json.dumps({
             'type': 'call_response', 'from': callee, 'to': caller, 'status': 'accepted'
         }))
-        peer_stream_key = generate_stream_key()
-        async with app.config.pg_pool.acquire() as connection:
-            qresult = await connection.execute(
-                """
-                update stream
-                set peer_stream_key = $1
-                where stream_key = $2
-                """,
-                peer_stream_key, stream_key
-            )
-        for ws in app.ws_connections.values():
-            await ws.send(json.dumps({
-                'type': 'peer-accept', 'peer_stream_key': peer_stream_key
-            }))
+
+        stream = await get_stream(stream_id)
+        peer_stream_key = stream['peer_stream_key']
+        # for ws in app.ws_connections.values():
+        #     await ws.send(json.dumps({
+        #         'type': 'peer-accept', 'peer_stream_key': peer_stream_key
+        #     }))
         return response.json({'status': 'success', 'stream_key': peer_stream_key})
     else:
         await ws.send(json.dumps({
@@ -213,16 +206,17 @@ async def add_stream(request):
         wall_id = request.json.get('wall_id')
         private = request.json.get('private')
         stream_key = generate_stream_key()
+        peer_stream_key = generate_stream_key()
         async with app.config.pg_pool.acquire() as connection:
             stream = await connection.fetchrow(
                 """
                 insert into stream
-                (wall_id, stream_key, private)
+                (wall_id, stream_key, peer_stream_key private)
                 values
-                ($1, $2, $3)
+                ($1, $2, $3, $4)
                 returning *
                 """,
-                wall_id, stream_key, private
+                wall_id, stream_key, peer_stream_key, private
             )
         await inform_followers(user_id, stream)
         return response.json({'stream_id': stream['id']})
@@ -233,20 +227,14 @@ async def add_stream(request):
 
 
 async def send_stream(request, stream_id):
-    async with app.config.pg_pool.acquire() as connection:
-        stream = await connection.fetchrow(
-            """
-            select * from stream
-            where id = $1
-            """,
-            stream_id
-        )
-        if not stream:
-            return response.html('Permission_denied')
-        stream_key = stream['stream_key']
+    stream = await get_stream(stream_id)
+    if not stream:
+        return response.html('Permission_denied')
+    stream_key = stream['stream_key']
     with open('templates/send.html') as f:
         content = f.read()
         content = content.replace('{{stream_key}}', stream['stream_key'])
+        content = content.replace('{{stream_id}}', str(stream['id']))
         content = content.replace('{{ws_url}}', ws_url)
         return response.html(content)
 
@@ -262,16 +250,9 @@ async def home(request):
 
 async def join_stream(request, stream_id):
     user_id = int(request.args.get('uid'))
-    async with app.config.pg_pool.acquire() as connection:
-        stream = await connection.fetchrow(
-            """
-            select * from stream
-            where id = $1
-            """,
-            stream_id
-        )
-        if not stream:
-            return response.html('Permission_denied')
+    stream = await get_stream(stream_id)
+    if not stream:
+        return response.html('Permission_denied')
 
     if stream['private']:
         if stream['wall_id']:
@@ -308,6 +289,7 @@ async def offer(request):
     params = request.json
     offer = RTCSessionDescription(sdp=params["sdp"], type=params["type"])
     stream_key = params["stream_key"]
+    stream_id = params["stream_id"]
 
     pc = RTCPeerConnection()
     pc_id = "PeerConnection(%s)" % uuid4()
@@ -318,7 +300,7 @@ async def offer(request):
 
     recorder = MediaRecorder(f'{rtmp_url}/{stream_key}', format='flv', options={
         'framerate': '1',
-        'video_size': '720x404', 
+        'video_size': '720x404',
         'vcodec': 'libx264',
         'maxrate': '768k',
         'bufsize': '8080k',
@@ -345,20 +327,20 @@ async def offer(request):
     def on_track(track):
         log_info("Track %s received", track.kind)
 
-        stream_chat_dict = app.chats.get(stream_key)
-        if stream_chat_dict:
+        chat_dict = app.chats.get(stream_id)
+        if chat_dict:
             this_user = params["name"]
-            this_user_dict = stream_chat_dict[this_user]
+            this_user_dict = chat_dict[this_user]
             this_user_dict['pc'] = pc
             peer_dict = None
             if this_user_dict['role'] == 'callee':
                 peer = this_user_dict['peer']
-                peer_dict = stream_chat_dict[peer]
+                peer_dict = chat_dict[peer]
 
         if track.kind == "audio":
-            # pc.addTrack(track)
             recorder.addTrack(track)
-            if stream_chat_dict:
+            # pc.addTrack(track)
+            if chat_dict:
                 this_user_dict['audio_track'] = track
                 if peer_dict:
                     peer_dict['pc'].addTrack(track)
@@ -367,9 +349,9 @@ async def offer(request):
             transformed_track = VideoTransformTrack(
                 track, transform=params["video_transform"]
             )
-            # pc.addTrack(transformed_track)
             recorder.addTrack(transformed_track)
-            if stream_chat_dict:
+            # pc.addTrack(transformed_track)
+            if chat_dict:
                 this_user_dict['video_track'] = transformed_track
                 if peer_dict:
                     peer_dict['pc'].addTrack(transformed_track)
@@ -411,6 +393,18 @@ def generate_stream_key():
     return uuid4().hex[:8]
 
 
+async def get_stream(stream_id):
+    async with app.config.pg_pool.acquire() as connection:
+        stream = await connection.fetchrow(
+            """
+            select * from stream
+            where id = $1
+            """,
+            stream_id
+        )
+    return stream
+
+
 if __name__ == "__main__":
     app.add_route(home, '/')
     app.add_route(add_stream, '/stream/add', methods=["GET", "POST"])
@@ -419,7 +413,7 @@ if __name__ == "__main__":
     app.add_route(offer, '/offer/', methods=["GET", "POST"])
     app.add_route(call, '/call/', methods=["GET", "POST"])
     app.add_route(call_response, '/call-response/', methods=["GET", "POST"])
-    app.add_websocket_route(feed, '/ws')
+    app.add_websocket_route(ws_handler, '/ws')
 
     # app.add_task(notify_server_started_after_five_seconds)
     app.run(host='0.0.0.0', port=server_port, ssl=context, workers=1)
